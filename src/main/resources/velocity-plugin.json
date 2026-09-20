@@ -1,0 +1,10 @@
+{
+  "id": "partnerbridge",
+  "name": "PartnerBridge",
+  "version": "1.0.0",
+  "description": "Minecraft 1.20.5+ partner network cookie & transfer gateway for HG-PvP",
+  "authors": [
+    "HG-PvP"
+  ],
+  "main": "net.hgpvp.partner.PartnerBridgePlugin"
+}
