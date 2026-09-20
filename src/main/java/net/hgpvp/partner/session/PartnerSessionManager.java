@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -15,17 +16,42 @@ public final class PartnerSessionManager {
     private final Map<UUID, PartnerSession> sessions = new ConcurrentHashMap<>();
     private final Gson gson = new Gson();
     private final Logger logger;
+    private final Set<String> localHosts;
 
     public PartnerSessionManager(Logger logger) {
+        this(logger, Set.of("play.hg-pvp.net", "hg-pvp.net", "beta.hg-pvp.net", "crack.hg-pvp.net", "localhost", "127.0.0.1"));
+    }
+
+    public PartnerSessionManager(Logger logger, Set<String> localHosts) {
         this.logger = logger;
+        this.localHosts = localHosts != null ? localHosts : Set.of();
     }
 
     public void registerSession(UUID uuid, PartnerSession session) {
+        if (isLocalHost(session.returnHost())) {
+            if (logger != null) {
+                logger.debug("Cookie de retour local détecté ({}) pour {}, joueur considéré comme de retour sur HG-PvP.",
+                        session.returnHost(), uuid);
+            }
+            return;
+        }
+
         sessions.put(uuid, session);
         if (logger != null) {
             logger.info("Session partenaire enregistrée pour {}: {} (retour: {}:{})",
                     uuid, session.originNetwork(), session.returnHost(), session.returnPort());
         }
+    }
+
+    public boolean isLocalHost(String host) {
+        if (host == null || host.isBlank()) return true;
+        String clean = host.trim().toLowerCase();
+        for (String local : localHosts) {
+            if (clean.equalsIgnoreCase(local) || clean.endsWith("." + local)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public Optional<PartnerSession> getSession(UUID uuid) {
@@ -122,6 +148,7 @@ public final class PartnerSessionManager {
         json.addProperty("return", returnHost + ":" + returnPort);
         json.addProperty("game", targetGame != null ? targetGame : "hungergames");
         json.addProperty("network", networkName != null ? networkName : "HG-PvP");
+        json.addProperty("returnEnabled", true);
         return gson.toJson(json).getBytes(StandardCharsets.UTF_8);
     }
 

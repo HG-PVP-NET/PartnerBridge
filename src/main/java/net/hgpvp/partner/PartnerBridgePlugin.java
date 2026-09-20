@@ -64,7 +64,15 @@ public final class PartnerBridgePlugin {
     public void onProxyInitialization(ProxyInitializeEvent event) {
         loadConfig();
 
-        this.sessionManager = new PartnerSessionManager(logger);
+        this.sessionManager = new PartnerSessionManager(logger, java.util.Set.of(
+                publicReturnHost.toLowerCase(),
+                "play.hg-pvp.net",
+                "hg-pvp.net",
+                "beta.hg-pvp.net",
+                "crack.hg-pvp.net",
+                "localhost",
+                "127.0.0.1"
+        ));
         this.hgSelector = new HgServerSelector(proxy, hgServers, hgFallback, logger);
         this.lobbySelector = new LobbyServerSelector(proxy, lobbyServers, lobbyFallback, lobbyFullThreshold, logger);
 

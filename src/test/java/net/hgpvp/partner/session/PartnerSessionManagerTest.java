@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -15,7 +16,7 @@ class PartnerSessionManagerTest {
 
     @BeforeEach
     void setUp() {
-        manager = new PartnerSessionManager(null);
+        manager = new PartnerSessionManager(null, Set.of("play.hg-pvp.net", "hg-pvp.net", "beta.hg-pvp.net", "localhost", "127.0.0.1"));
     }
 
     @Test
@@ -81,6 +82,16 @@ class PartnerSessionManagerTest {
         Optional<PartnerSession> removed = manager.removeSession(uuid);
         assertThat(removed).contains(session);
         assertThat(manager.hasSession(uuid)).isFalse();
+    }
+
+    @Test
+    void testLocalReturnHostNotRegistered() {
+        UUID uuid = UUID.randomUUID();
+        PartnerSession returningHomeSession = new PartnerSession("play.hg-pvp.net", 25565, "HG-PvP", "pillars-of-fortune");
+
+        manager.registerSession(uuid, returningHomeSession);
+        assertThat(manager.hasSession(uuid)).isFalse();
+        assertThat(manager.getSession(uuid)).isEmpty();
     }
 
     @Test

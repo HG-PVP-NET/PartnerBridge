@@ -24,6 +24,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class PartnerCookieListener {
 
     public static final List<Key> PARTNER_COOKIE_KEYS = List.of(
+            Key.key("springywire", "partner_ticket"),
+            Key.key("springywire", "ticket"),
             Key.key("springywire", "partner"),
             Key.key("springywire", "data"),
             Key.key("springywire", "transfer"),
@@ -31,6 +33,7 @@ public final class PartnerCookieListener {
             Key.key("partner", "data"),
             Key.key("partner", "return"),
             Key.key("partner", "transfer"),
+            Key.key("partner", "ticket"),
             Key.key("cmfr", "data"),
             Key.key("cmfr", "partner"),
             Key.key("hgpvp", "partner"),
