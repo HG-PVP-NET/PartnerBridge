@@ -40,7 +40,7 @@ public final class PartnerCommand implements SimpleCommand {
         this.sessionManager = sessionManager;
         this.publicReturnHost = publicReturnHost != null && !publicReturnHost.isBlank() ? publicReturnHost : "play.hg-pvp.net";
         this.publicReturnPort = publicReturnPort > 0 ? publicReturnPort : 25565;
-        this.cmfrHost = cmfrHost != null && !cmfrHost.isBlank() ? cmfrHost : "play.craftmybox.fr";
+        this.cmfrHost = cmfrHost != null && !cmfrHost.isBlank() ? cmfrHost : "cmfr.skoice.net";
         this.cmfrPort = cmfrPort > 0 ? cmfrPort : 25565;
         this.logger = logger;
     }
@@ -60,7 +60,7 @@ public final class PartnerCommand implements SimpleCommand {
         String[] args = invocation.arguments();
         String game = (args.length > 0 && !args[0].isBlank()) ? args[0].toLowerCase() : "pillars-of-fortune";
 
-        player.sendMessage(mm.deserialize("<gold>Transfert vers le réseau partenaire <yellow>CraftMyBox (CMFR)</yellow> pour <aqua>" + game + "</aqua>...</gold>"));
+        player.sendMessage(mm.deserialize("<gold>Transfert vers le réseau partenaire <yellow>CMFR</yellow> pour <aqua>" + game + "</aqua>...</gold>"));
 
         byte[] payload = sessionManager.createCookiePayload(publicReturnHost, publicReturnPort, game, "HG-PvP");
 
@@ -71,12 +71,22 @@ public final class PartnerCommand implements SimpleCommand {
             } catch (Exception ignored) {}
         }
 
+        String targetHost = this.cmfrHost;
+        int targetPort = this.cmfrPort;
+        if (targetHost != null && targetHost.contains(":")) {
+            String[] parts = targetHost.split(":", 2);
+            targetHost = parts[0].trim();
+            try {
+                targetPort = Integer.parseInt(parts[1].trim());
+            } catch (NumberFormatException ignored) {}
+        }
+
         try {
             if (logger != null) {
                 logger.info("Transfert sortant du joueur {} vers CMFR ({}:{}) pour {}",
-                        player.getUsername(), cmfrHost, cmfrPort, game);
+                        player.getUsername(), targetHost, targetPort, game);
             }
-            player.transferToHost(new InetSocketAddress(cmfrHost, cmfrPort));
+            player.transferToHost(new InetSocketAddress(targetHost, targetPort));
         } catch (Exception ex) {
             player.sendMessage(mm.deserialize("<red>Échec du transfert vers le serveur partenaire : " + ex.getMessage() + "</red>"));
             if (logger != null) {

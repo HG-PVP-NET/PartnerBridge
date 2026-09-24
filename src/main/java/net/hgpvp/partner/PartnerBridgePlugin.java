@@ -45,7 +45,7 @@ public final class PartnerBridgePlugin {
 
     private String publicReturnHost = "play.hg-pvp.net";
     private int publicReturnPort = 25565;
-    private String cmfrHost = "play.craftmybox.fr";
+    private String cmfrHost = "cmfr.skoice.net";
     private int cmfrPort = 25565;
     private List<String> hgServers = List.of("hg0", "hg1", "hg2", "hg3", "hg4");
     private String hgFallback = "hg0";
@@ -106,8 +106,8 @@ public final class PartnerBridgePlugin {
         commandManager.register(commandManager.metaBuilder("hub").plugin(this).build(), lobbyCmd);
         commandManager.register(commandManager.metaBuilder("l").plugin(this).build(), lobbyCmd);
 
-        logger.info("PartnerBridge initialisé avec succès ! (Lobbies: {}, Seuil Plein: {} joueurs, Serveurs HG: {})",
-                lobbyServers, lobbyFullThreshold, hgServers);
+        logger.info("PartnerBridge initialisé avec succès ! (CMFR Cible: {}:{}, Lobbies: {}, Seuil Plein: {} joueurs, Serveurs HG: {})",
+                cmfrHost, cmfrPort, lobbyServers, lobbyFullThreshold, hgServers);
     }
 
     private void loadConfig() {
@@ -142,13 +142,22 @@ public final class PartnerBridgePlugin {
             this.publicReturnPort = 25565;
         }
 
-        this.cmfrHost = System.getenv().getOrDefault("CMFR_HOST",
-                properties.getProperty("cmfr-host", "play.craftmybox.fr"));
+        String envCmfr = System.getenv().getOrDefault("CMFR_HOST",
+                properties.getProperty("cmfr-host", "cmfr.skoice.net"));
 
-        try {
-            this.cmfrPort = Integer.parseInt(System.getenv().getOrDefault("CMFR_PORT",
-                    properties.getProperty("cmfr-port", "25565")));
-        } catch (NumberFormatException ignored) {}
+        if (envCmfr != null && envCmfr.contains(":")) {
+            String[] parts = envCmfr.split(":", 2);
+            this.cmfrHost = parts[0].trim();
+            try {
+                this.cmfrPort = Integer.parseInt(parts[1].trim());
+            } catch (NumberFormatException ignored) {}
+        } else if (envCmfr != null) {
+            this.cmfrHost = envCmfr.trim();
+            try {
+                this.cmfrPort = Integer.parseInt(System.getenv().getOrDefault("CMFR_PORT",
+                        properties.getProperty("cmfr-port", "25565")));
+            } catch (NumberFormatException ignored) {}
+        }
 
         String serversStr = System.getenv().getOrDefault("HG_SERVERS",
                 properties.getProperty("hg-servers", "hg0,hg1,hg2,hg3,hg4"));
