@@ -46,6 +46,7 @@ public final class PartnerCookieListener {
     private final HgServerSelector hgSelector;
     private final Logger logger;
     private final Set<UUID> requestedPlayers = ConcurrentHashMap.newKeySet();
+    private final Set<UUID> redirectedPartnerLogins = ConcurrentHashMap.newKeySet();
 
     public PartnerCookieListener(ProxyServer proxy, PartnerSessionManager sessionManager, HgServerSelector hgSelector, Logger logger) {
         this.proxy = proxy;
@@ -99,11 +100,24 @@ public final class PartnerCookieListener {
         }
 
         PartnerSession session = parsed.get();
+        if (sessionManager.isLocalHost(session.returnHost())) {
+            if (logger != null) {
+                logger.debug("Cookie de retour local reçu pour {} (returnHost: {}), joueur de retour sur HG-PvP (maintien sur le lobby).",
+                        player.getUsername(), session.returnHost());
+            }
+            return;
+        }
+
         sessionManager.registerSession(player.getUniqueId(), session);
 
         if (logger != null) {
             logger.info("Joueur partenaire {} reçu depuis {} ({}:{}) pour le jeu {}",
                     player.getUsername(), session.originNetwork(), session.returnHost(), session.returnPort(), session.targetGame());
+        }
+
+        // Only redirect once per login session for incoming partner players
+        if (!redirectedPartnerLogins.add(player.getUniqueId())) {
+            return;
         }
 
         // Check if player is on a lobby or not yet on an HG server
@@ -124,8 +138,10 @@ public final class PartnerCookieListener {
 
     @Subscribe
     public void onDisconnect(DisconnectEvent event) {
-        requestedPlayers.remove(event.getPlayer().getUniqueId());
-        sessionManager.removeSession(event.getPlayer().getUniqueId());
+        UUID uuid = event.getPlayer().getUniqueId();
+        requestedPlayers.remove(uuid);
+        redirectedPartnerLogins.remove(uuid);
+        sessionManager.removeSession(uuid);
     }
 
     private boolean isLobbyServer(String name) {
