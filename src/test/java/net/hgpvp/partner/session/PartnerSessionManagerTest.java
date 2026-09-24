@@ -20,6 +20,13 @@ class PartnerSessionManagerTest {
     }
 
     @Test
+    void testDefaultConstructor() {
+        PartnerSessionManager defaultManager = new PartnerSessionManager(null);
+        assertThat(defaultManager.isLocalHost("play.hg-pvp.net")).isTrue();
+        assertThat(defaultManager.isLocalHost("play.craftmybox.fr")).isFalse();
+    }
+
+    @Test
     void testParseJsonPayloadWithReturn() {
         String json = "{\"return\":\"play.craftmybox.fr:25565\",\"game\":\"hungergames\",\"network\":\"CMFR\"}";
         Optional<PartnerSession> session = manager.parseCookiePayload(json.getBytes(StandardCharsets.UTF_8));
