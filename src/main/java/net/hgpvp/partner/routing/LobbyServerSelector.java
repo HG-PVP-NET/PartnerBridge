@@ -39,9 +39,36 @@ public final class LobbyServerSelector {
         this.candidateServerNames.sort(Comparator.comparingInt(this::extractNumericId));
     }
 
-    public CompletableFuture<RegisteredServer> findBestLobbyServer() {
+    public void startStatusChecker(Object plugin, int intervalSeconds) {
+        if (proxy == null || plugin == null) return;
+        int interval = intervalSeconds > 0 ? intervalSeconds : 5;
+        refreshAllStatuses();
+        proxy.getScheduler().buildTask(plugin, this::refreshAllStatuses)
+                .repeat(Duration.ofSeconds(interval))
+                .schedule();
+    }
+
+    public void refreshAllStatuses() {
+        if (proxy == null) return;
+        for (String name : candidateServerNames) {
+            proxy.getServer(name).ifPresent(server -> {
+                PingOptions options = PingOptions.builder().timeout(Duration.ofMillis(600)).build();
+                server.ping(options).whenComplete((ping, throwable) -> {
+                    if (throwable == null && ping != null) {
+                        int players = ping.getPlayers().map(ServerPing.Players::getOnline).orElse(0);
+                        int max = ping.getPlayers().map(ServerPing.Players::getMax).orElse(500);
+                        statusCache.put(name, new LobbyStatus(server, true, players, max));
+                    } else {
+                        statusCache.put(name, new LobbyStatus(server, false, 0, 0));
+                    }
+                });
+            });
+        }
+    }
+
+    public RegisteredServer findBestLobbyServerInstant() {
         if (proxy == null) {
-            return CompletableFuture.completedFuture(null);
+            return null;
         }
 
         List<RegisteredServer> availableServers = new ArrayList<>();
@@ -50,83 +77,66 @@ public final class LobbyServerSelector {
         }
 
         if (availableServers.isEmpty()) {
-            return CompletableFuture.completedFuture(proxy.getServer(fallbackServerName).orElse(null));
+            return proxy.getServer(fallbackServerName).orElse(null);
         }
 
-        // Ping all candidate lobby servers in parallel
-        List<CompletableFuture<LobbyStatus>> pingFutures = availableServers.stream()
-                .map(this::pingServer)
-                .toList();
+        // 1. Find the FIRST available lobby that is cached as online and NOT full (sorted by ID ascending)
+        for (String name : candidateServerNames) {
+            LobbyStatus status = statusCache.get(name);
+            if (status != null && status.online() && !status.isFull(fullThreshold)) {
+                if (logger != null) {
+                    logger.debug("Lobby non-plein sélectionné: {} (joueurs: {}/{})",
+                            status.server().getServerInfo().getName(), status.players(), status.maxPlayers());
+                }
+                return status.server();
+            }
+        }
 
-        return CompletableFuture.allOf(pingFutures.toArray(new CompletableFuture[0]))
-                .thenApply(v -> {
-                    List<LobbyStatus> results = pingFutures.stream()
-                            .map(f -> {
-                                try {
-                                    return f.join();
-                                } catch (Exception ignored) {
-                                    return null;
-                                }
-                            })
-                            .filter(Objects::nonNull)
-                            .sorted(Comparator.comparingInt(s -> extractNumericId(s.server().getServerInfo().getName())))
-                            .toList();
+        // 2. If all online lobbies are full, pick the online lobby with the fewest players
+        LobbyStatus leastPopulated = null;
+        for (String name : candidateServerNames) {
+            LobbyStatus status = statusCache.get(name);
+            if (status != null && status.online()) {
+                if (leastPopulated == null || status.players() < leastPopulated.players()) {
+                    leastPopulated = status;
+                }
+            }
+        }
 
-                    // 1. Find the FIRST available lobby that is online and NOT full (sorted by ID ascending)
-                    for (LobbyStatus status : results) {
-                        if (status.online() && !status.isFull(fullThreshold)) {
-                            if (logger != null) {
-                                logger.debug("Premier lobby disponible et non-plein sélectionné: {} (joueurs: {}/{})",
-                                        status.server().getServerInfo().getName(), status.players(), status.maxPlayers());
-                            }
-                            return status.server();
-                        }
-                    }
+        if (leastPopulated != null) {
+            if (logger != null) {
+                logger.warn("Tous les lobbies sont pleins (>= {} joueurs). Sélection du lobby le moins rempli: {} ({}/{} joueurs)",
+                        fullThreshold, leastPopulated.server().getServerInfo().getName(),
+                        leastPopulated.players(), leastPopulated.maxPlayers());
+            }
+            return leastPopulated.server();
+        }
 
-                    // 2. If all online lobbies are full, pick the online lobby with the fewest players
-                    LobbyStatus leastPopulated = null;
-                    for (LobbyStatus status : results) {
-                        if (status.online()) {
-                            if (leastPopulated == null || status.players() < leastPopulated.players()) {
-                                leastPopulated = status;
-                            }
-                        }
-                    }
-
-                    if (leastPopulated != null) {
-                        if (logger != null) {
-                            logger.warn("Tous les lobbies sont pleins (>= {} joueurs). Sélection du lobby le moins rempli: {} ({}/{} joueurs)",
-                                    fullThreshold, leastPopulated.server().getServerInfo().getName(),
-                                    leastPopulated.players(), leastPopulated.maxPlayers());
-                        }
-                        return leastPopulated.server();
-                    }
-
-                    // 3. Fallback to configured default lobby
-                    if (logger != null) {
-                        logger.warn("Aucun lobby joignable, utilisation du fallback: {}", fallbackServerName);
-                    }
-                    return proxy.getServer(fallbackServerName).orElse(availableServers.get(0));
-                });
+        // 3. Fallback to configured default lobby
+        return proxy.getServer(fallbackServerName).orElse(availableServers.get(0));
     }
 
-    private CompletableFuture<LobbyStatus> pingServer(RegisteredServer server) {
-        String name = server.getServerInfo().getName();
-        PingOptions options = PingOptions.builder().timeout(Duration.ofMillis(800)).build();
+    public CompletableFuture<RegisteredServer> findBestLobbyServer() {
+        return CompletableFuture.completedFuture(findBestLobbyServerInstant());
+    }
 
-        return server.ping(options)
-                .thenApply(ping -> {
-                    int players = ping.getPlayers().map(ServerPing.Players::getOnline).orElse(0);
-                    int max = ping.getPlayers().map(ServerPing.Players::getMax).orElse(500);
-                    LobbyStatus status = new LobbyStatus(server, true, players, max);
-                    statusCache.put(name, status);
-                    return status;
-                })
-                .exceptionally(ex -> {
-                    LobbyStatus status = new LobbyStatus(server, false, 0, 0);
-                    statusCache.put(name, status);
-                    return status;
-                });
+    public List<LobbyStatus> getLobbyStatuses() {
+        List<LobbyStatus> list = new ArrayList<>();
+        if (proxy == null) return list;
+
+        for (String name : candidateServerNames) {
+            Optional<RegisteredServer> srvOpt = proxy.getServer(name);
+            if (srvOpt.isPresent()) {
+                RegisteredServer server = srvOpt.get();
+                LobbyStatus status = statusCache.get(name);
+                if (status != null) {
+                    list.add(status);
+                } else {
+                    list.add(new LobbyStatus(server, false, 0, 0));
+                }
+            }
+        }
+        return list;
     }
 
     public int extractNumericId(String serverName) {

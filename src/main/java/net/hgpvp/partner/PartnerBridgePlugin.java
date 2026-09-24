@@ -52,6 +52,7 @@ public final class PartnerBridgePlugin {
     private List<String> lobbyServers = List.of("lobby0", "lobby1", "lobby2", "lobby3", "lobby4");
     private String lobbyFallback = "lobby0";
     private int lobbyFullThreshold = 50;
+    private int statusCheckIntervalSeconds = 5;
 
     @Inject
     public PartnerBridgePlugin(ProxyServer proxy, Logger logger, @DataDirectory Path dataDirectory) {
@@ -78,6 +79,7 @@ public final class PartnerBridgePlugin {
         this.sessionManager = new PartnerSessionManager(logger, java.util.Collections.unmodifiableSet(localHosts));
         this.hgSelector = new HgServerSelector(proxy, hgServers, hgFallback, logger);
         this.lobbySelector = new LobbyServerSelector(proxy, lobbyServers, lobbyFallback, lobbyFullThreshold, logger);
+        this.lobbySelector.startStatusChecker(this, statusCheckIntervalSeconds);
 
         EventManager eventManager = proxy.getEventManager();
         eventManager.register(this, new PartnerCookieListener(proxy, sessionManager, hgSelector, logger));
@@ -99,7 +101,7 @@ public final class PartnerBridgePlugin {
         commandManager.register(commandManager.metaBuilder("partenaire").plugin(this).build(), partnerCmd);
 
         // Unified lobby / hub commands
-        LobbyCommand lobbyCmd = new LobbyCommand(sessionManager, lobbySelector, logger);
+        LobbyCommand lobbyCmd = new LobbyCommand(proxy, sessionManager, lobbySelector, logger);
         commandManager.register(commandManager.metaBuilder("lobby").plugin(this).build(), lobbyCmd);
         commandManager.register(commandManager.metaBuilder("hub").plugin(this).build(), lobbyCmd);
         commandManager.register(commandManager.metaBuilder("l").plugin(this).build(), lobbyCmd);
@@ -173,6 +175,11 @@ public final class PartnerBridgePlugin {
                     properties.getProperty("lobby-full-threshold", "50")));
         } catch (NumberFormatException ignored) {}
 
+        try {
+            this.statusCheckIntervalSeconds = Integer.parseInt(System.getenv().getOrDefault("STATUS_CHECK_INTERVAL_SECONDS",
+                    properties.getProperty("status-check-interval-seconds", "5")));
+        } catch (NumberFormatException ignored) {}
+
         // Save default configuration file if absent
         if (!configFile.exists()) {
             properties.setProperty("return-host", publicReturnHost + ":" + publicReturnPort);
@@ -183,6 +190,7 @@ public final class PartnerBridgePlugin {
             properties.setProperty("lobby-servers", String.join(",", lobbyServers));
             properties.setProperty("lobby-fallback", lobbyFallback);
             properties.setProperty("lobby-full-threshold", String.valueOf(lobbyFullThreshold));
+            properties.setProperty("status-check-interval-seconds", String.valueOf(statusCheckIntervalSeconds));
             try (FileOutputStream out = new FileOutputStream(configFile)) {
                 properties.store(out, "PartnerBridge Configuration");
             } catch (IOException e) {
