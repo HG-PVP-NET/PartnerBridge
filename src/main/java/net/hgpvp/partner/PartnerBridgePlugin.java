@@ -29,7 +29,7 @@ import java.util.Properties;
 @Plugin(
         id = "partnerbridge",
         name = "PartnerBridge",
-        version = "1.0.0",
+        version = "1.0.1",
         description = "Minecraft 1.20.5+ partner network cookie & transfer gateway and dynamic lobby load balancer for HG-PvP",
         authors = {"HG-PvP"}
 )
