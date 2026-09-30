@@ -2,9 +2,8 @@ package net.hgpvp.partner.listener;
 
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.connection.DisconnectEvent;
-import com.velocitypowered.api.event.connection.PostLoginEvent;
 import com.velocitypowered.api.event.player.CookieReceiveEvent;
-import com.velocitypowered.api.event.player.ServerPreConnectEvent;
+import com.velocitypowered.api.event.player.ServerPostConnectEvent;
 import com.velocitypowered.api.network.ProtocolVersion;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
@@ -56,17 +55,16 @@ public final class PartnerCookieListener {
     }
 
     @Subscribe
-    public void onPostLogin(PostLoginEvent event) {
+    public void onServerPostConnect(ServerPostConnectEvent event) {
+        // Cookie responses share the client's current protocol stream. Asking
+        // during PostLogin/ServerPreConnect races the initial backend protocol
+        // transition: a late response can be forwarded to Paper even though
+        // that backend never requested it. Wait until the player has completed
+        // the first backend connection before issuing the compatibility scan.
         requestCookies(event.getPlayer());
     }
 
-    @Subscribe
-    public void onServerPreConnect(ServerPreConnectEvent event) {
-        Player player = event.getPlayer();
-        requestCookies(player);
-    }
-
-    private void requestCookies(Player player) {
+    void requestCookies(Player player) {
         if (player.getProtocolVersion().lessThan(ProtocolVersion.MINECRAFT_1_20_5)) {
             return;
         }
