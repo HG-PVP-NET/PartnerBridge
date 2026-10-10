@@ -1,5 +1,6 @@
 package net.hgpvp.partner.listener;
 
+import com.velocitypowered.api.event.PostOrder;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.connection.DisconnectEvent;
 import com.velocitypowered.api.event.player.CookieReceiveEvent;
@@ -14,6 +15,7 @@ import net.hgpvp.partner.session.PartnerSessionManager;
 import net.kyori.adventure.key.Key;
 import org.slf4j.Logger;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -40,6 +42,7 @@ public final class PartnerCookieListener {
             Key.key("hgpvp", "data")
     );
 
+    private final Object plugin;
     private final ProxyServer proxy;
     private final PartnerSessionManager sessionManager;
     private final HgServerSelector hgSelector;
@@ -48,6 +51,11 @@ public final class PartnerCookieListener {
     private final Set<UUID> redirectedPartnerLogins = ConcurrentHashMap.newKeySet();
 
     public PartnerCookieListener(ProxyServer proxy, PartnerSessionManager sessionManager, HgServerSelector hgSelector, Logger logger) {
+        this(null, proxy, sessionManager, hgSelector, logger);
+    }
+
+    public PartnerCookieListener(Object plugin, ProxyServer proxy, PartnerSessionManager sessionManager, HgServerSelector hgSelector, Logger logger) {
+        this.plugin = plugin;
         this.proxy = proxy;
         this.sessionManager = sessionManager;
         this.hgSelector = hgSelector;
@@ -60,8 +68,21 @@ public final class PartnerCookieListener {
         // during PostLogin/ServerPreConnect races the initial backend protocol
         // transition: a late response can be forwarded to Paper even though
         // that backend never requested it. Wait until the player has completed
-        // the first backend connection before issuing the compatibility scan.
-        requestCookies(event.getPlayer());
+        // the first backend connection before issuing the compatibility scan,
+        // and delay slightly so the play session state is fully settled.
+        Player player = event.getPlayer();
+        if (logger != null) {
+            logger.debug("onServerPostConnect pour {}", player.getUsername());
+        }
+        if (proxy != null && plugin != null) {
+            proxy.getScheduler().buildTask(plugin, () -> {
+                if (player.isActive()) {
+                    requestCookies(player);
+                }
+            }).delay(Duration.ofMillis(500)).schedule();
+        } else {
+            requestCookies(player);
+        }
     }
 
     void requestCookies(Player player) {
@@ -69,8 +90,18 @@ public final class PartnerCookieListener {
             return;
         }
 
+        // Les clients Bedrock / Floodgate ne supportent pas les cookies Java
+        String username = player.getUsername();
+        if (username != null && (username.startsWith(".") || username.startsWith("*"))) {
+            return;
+        }
+
         if (!requestedPlayers.add(player.getUniqueId())) {
             return;
+        }
+
+        if (logger != null) {
+            logger.debug("Envoi de {} requêtes de cookies pour {}", PARTNER_COOKIE_KEYS.size(), player.getUsername());
         }
 
         for (Key key : PARTNER_COOKIE_KEYS) {
@@ -84,11 +115,26 @@ public final class PartnerCookieListener {
         }
     }
 
-    @Subscribe
+    @Subscribe(order = PostOrder.FIRST)
     public void onCookieReceive(CookieReceiveEvent event) {
+        // Règle absolue anti-kick : interdire immédiatement à Velocity de forwarder
+        // tout paquet de cookie vers Paper. Paper n'en attend aucun et kicke
+        // le joueur avec 'multiplayer.disconnect.unexpected_query_response'.
+        event.setResult(CookieReceiveEvent.ForwardResult.handled());
+
+        if (logger != null) {
+            logger.debug("onCookieReceive: joueur={}, key={}, dataLength={}",
+                    event.getPlayer().getUsername(), event.getOriginalKey(),
+                    event.getOriginalData() == null ? -1 : event.getOriginalData().length);
+        }
+
         Player player = event.getPlayer();
         byte[] data = event.getOriginalData();
         if (data == null || data.length == 0) {
+            return;
+        }
+
+        if (!PARTNER_COOKIE_KEYS.contains(event.getOriginalKey())) {
             return;
         }
 
