@@ -29,7 +29,7 @@ import java.util.Properties;
 @Plugin(
         id = "partnerbridge",
         name = "PartnerBridge",
-        version = "1.0.1+61b3efb",
+        version = "1.0.2",
         description = "Minecraft 1.20.5+ partner network cookie & transfer gateway and dynamic lobby load balancer for HG-PvP",
         authors = {"HG-PvP"}
 )
@@ -82,7 +82,7 @@ public final class PartnerBridgePlugin {
         this.lobbySelector.startStatusChecker(this, statusCheckIntervalSeconds);
 
         EventManager eventManager = proxy.getEventManager();
-        eventManager.register(this, new PartnerCookieListener(proxy, sessionManager, hgSelector, logger));
+        eventManager.register(this, new PartnerCookieListener(this, proxy, sessionManager, hgSelector, logger));
         eventManager.register(this, new PartnerRoutingListener(sessionManager, hgSelector, lobbySelector, logger));
 
         CommandManager commandManager = proxy.getCommandManager();

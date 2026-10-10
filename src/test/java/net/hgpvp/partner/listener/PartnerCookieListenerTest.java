@@ -60,4 +60,47 @@ class PartnerCookieListenerTest {
                 .contains(ServerPostConnectEvent.class)
                 .doesNotContain(PostLoginEvent.class, ServerPreConnectEvent.class);
     }
+
+    @Test
+    void partnerCookiesAreMarkedHandledToPreventBackendKicks() {
+        com.velocitypowered.api.event.player.CookieReceiveEvent event =
+                new com.velocitypowered.api.event.player.CookieReceiveEvent(
+                        player,
+                        PartnerCookieListener.PARTNER_COOKIE_KEYS.get(0),
+                        new byte[0]
+                );
+
+        listener.onCookieReceive(event);
+
+        assertThat(event.getResult().isAllowed()).isFalse();
+    }
+
+    @Test
+    void unknownCookiesAreAlsoMarkedHandledToProtectPaperBackend() {
+        net.kyori.adventure.key.Key unknownKey = net.kyori.adventure.key.Key.key("custom", "unknown_cookie");
+        com.velocitypowered.api.event.player.CookieReceiveEvent event =
+                new com.velocitypowered.api.event.player.CookieReceiveEvent(
+                        player,
+                        unknownKey,
+                        new byte[0]
+                );
+
+        listener.onCookieReceive(event);
+
+        assertThat(event.getResult().isAllowed()).isFalse();
+    }
+
+    @Test
+    void ignoresBedrockAndFloodgatePlayers() {
+        Player bedrockPlayer = mock(Player.class);
+        when(bedrockPlayer.getUniqueId()).thenReturn(UUID.randomUUID());
+        when(bedrockPlayer.getProtocolVersion()).thenReturn(ProtocolVersion.MINECRAFT_1_21);
+        when(bedrockPlayer.getUsername()).thenReturn(".BedrockPlayer");
+
+        listener.requestCookies(bedrockPlayer);
+
+        for (var key : PartnerCookieListener.PARTNER_COOKIE_KEYS) {
+            verify(bedrockPlayer, times(0)).requestCookie(key);
+        }
+    }
 }
